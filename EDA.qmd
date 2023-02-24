@@ -1,0 +1,611 @@
+---
+title: " EDA of the Medical Data Set"
+author:
+  - name: Zoe Zhao
+    affiliations:
+      - name: Georgetown University        
+date: "`r Sys.Date()`"
+format:
+    html:
+        embed-resources: true
+        theme: default
+        code-copy: true
+        code-line-numbers: true
+        number-sections: true
+        highlight-style: espresso
+---
+
+## Data Summary
+
+The collagen disease dataset is collected at the University hospital. It is comprised of three cvs files: TSUMOTO_A.csv file which includes patients information and their basic demographics. TSUMOTO_B.csv which includes the special tests assigned by doctors to detect thrombosis, which is one of the most dangerous complications of collagen disease. TSUMOTO_C.csv file which includes all the laboratory tests in the hospital database.
+
+The dataset is organised on patients ID. Each patient will have a unique ID that identifies them and it is linked with the tests they conducted. The datasets contains valuable information on collagen disease and thrombosis. Analysing and understanding it is essential to finding patterns and observations that may influence the field.
+
+## Initial Questions
+
+After viewing the datasets, three questions were raised which will guide this EDA:
+
+-   What's the relationship between anti-cardiolipin antibodies and thrombosis?
+
+-   Among the isotypes of anti-cardiolipin antibodies (IgG, IgA, IgM), is there any difference in their relation to thrombosis?
+
+-   Is there any patterns that can help predict thrombosis?
+
+## Data Munging
+
+The datasets are loaded and renamed based on their content.
+
+```{python}
+#| echo: true
+#| warning: false
+import pandas as pd
+
+#read data
+patients=pd.read_csv("data/TSUMOTO_A.csv", encoding='latin-1')
+spe_tests=pd.read_csv("data/TSUMOTO_B.csv", encoding='latin-1')
+#row 8449 has a misplaced data in col46, so i read 46 cols first and then drop the last two cols
+alltests=pd.read_csv("data/TSUMOTO_C.csv", names=range(46), encoding='latin-1',low_memory=False)
+#drop the index row and use the first tow as column names
+alltests = alltests.reset_index().rename(columns=alltests.iloc[0]).drop(0)
+alltests = alltests.drop(columns=['index'])
+alltests = alltests.reset_index(drop=True)
+alltests = alltests.iloc[:, :-2]
+```
+
+#### The PATIENTS Dataset
+
+First look at the three dataset. The "patient" data stores the basic information of all patients. ".head()" is used to look at the first five observations of the dataset.
+
+```{python}
+#| echo: true
+#| warning: false
+patients.head()
+```
+
+Here, the "Description" column refers to the data when a patients was input, whereas the "First date" refers to the date when a patient came to the hospital. The dataset comprises of 1240 patients and 7 characteristics.
+
+#### The SPECIAL LABORATORY EXAMINATIONS Dataset
+
+The "spe_tests" dataset stores the data of patients and the special tests they did to detect thrombosis. The dataset comprises of 806 tests and 13 variables. The "Thrombosis" column shows whether the thrombosis is diagnosed (0: negative, 1: positive, 2: positive and very severe ).
+
+```{python}
+#| echo: true
+#| warning: false
+spe_tests.head()
+```
+
+#### The ALLTESTS Dataset
+
+The "alltests" dataset is a collections of all medical test stored in Hospital Information System from 1980 to 1999. It comprises of 57542 tests and 44 measurements.
+
+```{python}
+#| echo: true
+#| warning: false
+alltests.head()
+```
+
+#### First look at the three Datasets
+
+-   patients:
+
+```{python}
+#| echo: true
+#| warning: false
+patients.info()
+```
+
+-   special tests:
+
+```{python}
+#| echo: true
+#| warning: false
+spe_tests.info()
+```
+
+-   all tests:
+
+```{python}
+#| echo: true
+#| warning: false
+alltests.info()
+```
+
+#### Data sorting and renaming
+
+From pandas .info() function, it is clear that there exists a lot of null values, which need to be dealted with. The ID of patients is the value that connect these three table together.
+
+The following code is run to make the ID value in the three dataset the same data type(float) and sort the ID as numeric values in each dataset.
+
+```{python}
+#| echo: true
+#| warning: false
+# convert the "ID" column into float64
+patients['ID'] = patients['ID'].astype('float64')
+alltests = alltests.astype({'ID':'float'})
+
+patients = patients.sort_values(by='ID')
+spe_tests = spe_tests.sort_values(by='ID')
+alltests = alltests.sort_values(by='ID')
+alltests = alltests.reset_index(drop=True)
+patients = patients.reset_index(drop=True)
+```
+
+I also renamed some of the column names to make the naming more explanatory and make sure all three tables follow one single naming rule.
+
+```{python}
+#| echo: true
+#| warning: false
+# rename some of the columns
+patients= patients.rename(columns={'Description': 'Input_date', 'SEX':'Sex', 'First Date':'First_date', 'Diagnosis':'Diagnosis_patients'})
+spe_tests=spe_tests.rename(columns={'Examination Date':'Examination_date', 'ANA Pattern':'ANA_pattern', 'Diagnosis':'Diagnosis_spe'})
+```
+
+#### Dealing with NULL values
+
+To explore the relationship between anti-cardiolipin antibodies and thrombosis, all instances in the *spe_tests* dataset where any of the IgG, IgA, IgM values are NULL are dropped.
+
+```{python}
+#| echo: true
+#| warning: false
+spe_tests = spe_tests.dropna(subset=['aCL IgG', 'aCL IgM', 'aCL IgA'], how='any')
+```
+
+#### Merging the data
+
+To answer the research questions, two datasets are created. One combining the data in *patients* and *spe_tests* and one containing all the laboratory tests of patients who had been tested to detect thrombosis.
+
+From the observation, it is found that not all patient ID in the spec_tests dataset have a corresponding patient demographics data in the *patients* dataset. Since the main focus here is thrombosis, missing patients' demographics would not influence the pattern between anti-cardiolipin antibodies and thrombosis. Thus, the *patient* data is merged into the *spe_tests* dataset. All instances in spe_tests are preserved in the new dataset. Any special test without a proper patient ID will be named as "Unknown1", "Unknown2",... and so on for identification purpose. Patients who had not conducted the special test that detects thrombosis are dropped.
+
+```{python}
+#| echo: true
+#| warning: false
+import numpy as np
+# merge data
+thrombosis=spe_tests.merge(patients, how='left', on='ID')
+
+#dealing with null values
+mask = thrombosis['ID'].isnull()
+data = np.array(['Unknown' + str(i) for i in range(1, mask.sum() + 1)])
+labels = pd.Index(data)
+thrombosis.loc[mask, 'ID'] = labels
+
+```
+
+A column named "Thrombosis_diagnosed" is added to distinguish patients who had thrombosis (no matter what the level of severity is) and those who didn't for later analysis use.
+
+```{python}
+#| echo: true
+#| warning: false
+# if >0, then the patient has thrombosis
+thrombosis['Thrombosis_diagnosed']=np.where(thrombosis['Thrombosis'] > 0, 'Yes', 'No')
+```
+
+The second dataset is comprised of all columns in the *alltests* dataset, as well as the "Thrombosis" and the "Thrombosis_diagnosed" columns from the *thrombosis* dataset. In this dataset, the unit of analysis is the laboratory test. Only tests of patients who had conducted the special tests are preserved.
+
+```{python}
+#| echo: true
+#| warning: false
+#Drop the rows with Unknown ID
+to_drop = [f'Unknown{i}' for i in range(1, 37)]
+thrombosis_valid_id = thrombosis[~thrombosis['ID'].isin(to_drop)]
+```
+
+```{python}
+#| echo: true
+#| warning: false
+thrombosis_valid_id = thrombosis_valid_id.astype({'ID':'float'})
+alltests = alltests.astype({'ID':'float'})
+# select only the columns "ID", "Thrombosis_diagnosed",'Thrombosis' and 'Examination_date ' from the "spe" dataframe
+alltests_thrombosis = pd.merge(alltests, thrombosis_valid_id[['ID', 'Thrombosis_diagnosed', 'Thrombosis','Examination_date']], on='ID', how='inner')
+```
+
+```{python}
+# unify all time representations
+alltests_thrombosis.info()
+```
+
+#### Saving the file
+
+```{python}
+thrombosis.to_csv('thrombosis.csv',index=False) #, sep='\t')
+alltests_thrombosis.to_csv('alltests_thrombosis.csv',index=False) #, sep='\t')
+```
+
+## Exploratory Analysis
+
+The two resulting datasets for analysis are *alltests_thrombosis* and *thrombosis*. The describe() function provides summary statistics and tells the basic distribution of the data.
+
+```{python}
+#| echo: true
+#| warning: false
+thrombosis.describe()
+```
+
+In the *thrombosis* dataset, the mean value is notably higher than the median of each column (the 50% percentile). There are also a large difference in the 75th percentile and max values. This suggests there are extreme values outliers in the dataset.
+
+#### Dealing with outliers
+
+```{python}
+#| echo: false
+#| warning: false
+import seaborn as sns
+import matplotlib.pyplot as plt
+```
+
+```{python}
+#| echo: true
+#| warning: false
+sns.boxplot(x='aCL IgA',data=thrombosis)
+plt.show()
+```
+
+The boxplot and the describe() function reveals that there exists extreme high values in the anti-cardiolipin antibodies. Outliers need to be removed as they are mistyped or are special cases that will skew the general pattern. Outliers in aCL IgA, aCL IgM, aCL IgG in the thrombosis dataset are detected and removed using the interquartile range.
+
+```{python}
+#| echo: true
+#| warning: false
+#remove outliers in aCL IgA
+# IQR
+Q1 = np.percentile(thrombosis['aCL IgA'], 25,interpolation = 'midpoint')
+  
+Q3 = np.percentile(thrombosis['aCL IgA'], 75,interpolation = 'midpoint')
+IQR = Q3 - Q1
+  
+print("Old Shape: ", thrombosis.shape)
+  
+# Upper bound
+upper = np.where(thrombosis['aCL IgA'] >= (Q3+1.5*IQR))
+  
+# Lower bound
+lower = np.where(thrombosis['aCL IgA'] <= (Q1-1.5*IQR))
+  
+# Removing the Outliers
+thrombosis.drop(upper[0], inplace = True)
+thrombosis.drop(lower[0], inplace = True)
+
+print("New Shape: ", thrombosis.shape)
+```
+
+```{python}
+#| echo: true
+#| code-fold: true
+#| warning: false
+thrombosis.to_csv('thrombosis_removed_IQR.csv',index=False) #, sep='\t')
+```
+
+60 values are identified as outliers and removed from the dataset. I alos try to remove the outliers using the z-score and compare the results of two methods.
+
+```{python}
+#| echo: true
+#| warning: false
+#remove outliers using z-score
+thrombosis=pd.read_csv("thrombosis.csv")
+
+# Calculate mean and standard deviation of data column
+mean = thrombosis['aCL IgA'].mean()
+std_dev = thrombosis['aCL IgA'].std()
+
+# Determine threshold for outliers
+threshold = 3 * std_dev
+
+# Filter DataFrame to remove outliers
+thrombosis = thrombosis[(thrombosis['aCL IgA'] > mean - threshold) & (thrombosis['aCL IgA'] < mean + threshold)]
+```
+
+Using the z-score, only one data is removed from the dataset. This is because the original data are highly skewed and using the standard deviation is not as effective as using IQR. So I'll use IQR to identify outliers in aCL IgM and aCL IgG.
+
+```{python}
+#| echo: true
+#| code-fold: true
+#| warning: false
+#remove outliers in aCL IgG
+thrombosis=pd.read_csv("thrombosis_removed_IQR.csv")
+thrombosis.reset_index()
+# IQR
+Q1 = np.percentile(thrombosis['aCL IgG'], 25,interpolation = 'midpoint')
+  
+Q3 = np.percentile(thrombosis['aCL IgG'], 75,interpolation = 'midpoint')
+IQR = Q3 - Q1
+  
+print("Old Shape: ", thrombosis.shape)
+  
+# Upper bound
+upper = np.where(thrombosis['aCL IgG'] >= (Q3+1.5*IQR))
+  
+# Lower bound
+lower = np.where(thrombosis['aCL IgG'] <= (Q1-1.5*IQR))
+  
+# Removing the Outliers
+thrombosis.drop(upper[0], inplace = True)
+thrombosis.drop(lower[0], inplace = True)
+
+print("New Shape: ", thrombosis.shape)
+```
+
+69 values are identified as aCL IgG outliers and removed from the dataset.
+
+```{python}
+#| echo: true
+#| code-fold: true
+#| warning: false
+
+#remove outliers in aCL IgM
+
+# IQR
+Q1 = thrombosis['aCL IgM'].quantile(0.25)
+  
+Q3 = thrombosis['aCL IgM'].quantile(0.75)
+IQR = Q3 - Q1
+  
+print("Old Shape: ", thrombosis.shape)
+  
+# Determine bounds for outliers
+lower_bound = Q1 - 1.5 * IQR
+upper_bound = Q3 + 1.5 * IQR
+  
+# Removing the Outliers
+# Filter DataFrame to remove outliers
+thrombosis = thrombosis[(thrombosis['aCL IgM'] > lower_bound) & (thrombosis['aCL IgM'] < upper_bound)]
+
+print("New Shape: ", thrombosis.shape)
+```
+
+78 values are identified as aCL IgM outliers and removed from the dataset.
+
+```{python}
+#| echo: true
+#| warning: false
+thrombosis.to_csv('thrombosis_clean.csv',index=False) #, sep='\t')
+thrombosis.describe()
+```
+
+The resulting dataset has a total of 599 instances.
+
+#### Unify date representation
+
+The spec_tests data contains the most recent data, so only the IgG, IgA, IgM results tested at the time of a suspected thrombosis worth taken into account (aka. the data in the spe_tests). Even though there are anti-cardiolipin antibodies data in the alltests dataset, they are old data and have little to do with the analysis of thrombosis. In the alltests_thrombosis dataset, since I'd like to explore here how values change across time, all instances without a valid examination date are dropped.
+
+```{python}
+#| echo: true
+#| warning: false
+alltests_thrombosis = alltests_thrombosis.dropna(subset=['Examination_date', 'Date'], how='any')
+
+```
+
+A total of 357 laboratory tests are dropped and 19570 remains. Then the date representation needs to be unified.
+
+```{python}
+#| echo: true
+#| warning: false
+alltests_thrombosis['Date'] = pd.to_datetime(alltests_thrombosis['Date'])
+alltests_thrombosis['Examination_date'] = pd.to_datetime(alltests_thrombosis['Examination_date'])
+alltests_thrombosis.head()
+```
+
+#### View the distribution of anti-cardiolipin antibodies.
+
+To explore the relationship of anti-cardiolipin antibodies and thrombosis, it worth first looking at how the anti-cardiolipin antibodies are distributed. Histogram can provide a rough view of how the data distribute.
+
+```{python}
+#| echo: true
+#| warning: false
+g=sns.histplot(data=thrombosis, x='aCL IgM')
+plt.title('Distribution of aCL IgM')
+plt.show()
+```
+
+```{python}
+#| echo: true
+#| warning: false
+g=sns.histplot(data=thrombosis, x='aCL IgG')
+plt.title('Distribution of aCL IgG')
+plt.show()
+```
+
+```{python}
+#| echo: true
+#| warning: false
+g=sns.histplot(data=thrombosis, x='aCL IgA')
+plt.title('Distribution of aCL IgA')
+plt.show()
+```
+
+From the histogram, so significant pattern or observations can be made. Notice there are a lot of 0 values in both three variables. Noted the common range of IgG, IgM, and IgA are below 20.
+
+#### Exploring the relationship between anti-cardiolipin antibodies and thrombosis
+
+```{python}
+#| echo: true
+#| code-fold: true
+#| warning: false
+g=sns.relplot(
+    data=thrombosis, 
+    y="aCL IgA", 
+    x="Thrombosis", 
+    )
+plt.show()
+```
+
+A regplot between an isotype of anti-cardiolipin antibodies and Thrombosis doesn't really show anything. So I tried to do a violin plot to take a closer look at the anti-cardiolipin antibodies and their distributions.
+
+```{python}
+#| echo: true
+#| warning: false
+#| code-fold: true
+#violin plot
+fig, axs = plt.subplots(ncols=3, nrows=1,figsize=(16, 7))
+#violin plot for IgA
+sns.set_theme(style="whitegrid")
+sns.violinplot(x="Thrombosis", y="aCL IgA", palette="Accent", 
+cut=1,data=thrombosis, inner="stick",bw=.2,ax=axs[0])
+#plt.legend(loc='center right', bbox_to_anchor=(1.25, 0.5))
+#violin plot for IgG
+sns.set_theme(style="whitegrid")
+sns.violinplot(x="Thrombosis", y="aCL IgG", palette="Accent", 
+cut=1,data=thrombosis, inner="stick",bw=.2,ax=axs[1])
+#violin plot for IgM
+sns.set_theme(style="whitegrid")
+sns.violinplot(x="Thrombosis", y="aCL IgM", palette="Accent", 
+cut=1,data=thrombosis, inner="stick",bw=.2,ax=axs[2])
+
+fig.suptitle("Violin plot of anti-cardiolipin antibodies with respect to different level of thrombosis", fontsize=15)
+ax=axs[0]
+ax.yaxis.set_major_formatter(plt.FormatStrFormatter('% 0.1f'))
+ax=axs[2]
+ax.yaxis.set_major_formatter(plt.FormatStrFormatter('% 0.1f'))
+plt.savefig("plot-01.png")
+
+```
+
+From the graph plot, we can tell that the range of the data is huge and the amount of 0 values skewed the distribution a lot. It seems there are a lot of patients who don't have thrombosis and they influence the pattern a lot. So I decided to keep a set of thrombosis patients only.
+
+```{python}
+#| echo: true
+#| warning: false
+thrombosis_positive = thrombosis.loc[thrombosis['Thrombosis'] != 0].copy()
+thrombosis.describe()
+thrombosis_positive.info()
+thrombosis_positive.to_csv('thrombosis_positive.csv',index=False) #, sep='\t')
+```
+
+```{python}
+#| echo: true
+#| warning: false
+
+thrombosis.describe()
+
+```
+
+I also tried to plot stacked histogram to view the distribution more closely and compare the difference in three isotypes and the differnt level of thrombosis. To visualize the variation of isotypes among different level of thrombosis better, I set the ylimit.
+
+```{python}
+#| echo: true
+#| warning: false
+#stacked histogram
+fig, axs = plt.subplots(ncols=3, nrows=1,figsize=(15, 8))
+# Create a stacked histogram for aCL IgG
+thrombosis['Thrombosis'] = thrombosis['Thrombosis'].astype('object')
+sns.histplot(data=thrombosis, x="aCL IgG", hue="Thrombosis",palette="Accent", multiple="stack", ax=axs[0])
+ax=axs[0]
+ax.set_ylim([0, 50])
+ax.set_xlabel('aCL IgG (CU/ML)')
+# Create a stacked histogram for aCL IgM
+thrombosis['Thrombosis'] = thrombosis['Thrombosis'].astype('object')
+sns.histplot(data=thrombosis, x="aCL IgM", hue="Thrombosis", palette="Accent",multiple="stack", ax=axs[1])
+ax=axs[1]
+ax.set_ylim([0, 80])
+ax.set_xlabel('aCL IgM (CU/ML)')
+# Create a stacked histogram for aCL IgA
+thrombosis['Thrombosis'] = thrombosis['Thrombosis'].astype('object')
+sns.histplot(data=thrombosis, x="aCL IgA", hue="Thrombosis", palette="Accent",multiple="stack", ax=axs[2])
+ax=axs[2]
+ax.set_ylim([0, 50])
+ax.set_xlabel('aCL IgA (CU/ML)')
+plt.ylim([0,80])
+fig.suptitle("Stacked histogram of anti-cardiolipin antibodies by different level of thrombosis severity", fontsize=15)
+plt.savefig("plot-02.png")
+```
+
+#### Explore patterns in thrombosis
+
+First, to explore the pattern from the laboratory tests specific to thrombosis, a column named "days_passed" is created which counts the number of days since the medical test to the date of thrombosis.
+
+```{python}
+#| echo: true
+#| warning: false
+# Convert the 'start_date' and 'end_date' columns to datetime format
+# Calculate the number of days between the two columns
+alltests_thrombosis['days_passed'] = (alltests_thrombosis['Date'] - alltests_thrombosis['Examination_date']).dt.days
+alltests_thrombosis.to_csv('alltests_thrombosis.csv',index=False) #, sep='\t')
+```
+
+Here, I'm only interested in finding patterns in those who had been indentified with thrombosis, so I sorted out where thrombosis=1,2,3.
+
+```{python}
+#| echo: true
+#| warning: false
+#select tests of thrombosis positive patients
+alltests_thrombosis_positive = alltests_thrombosis[alltests_thrombosis['Thrombosis'] !=0]
+```
+
+I tried to look at the lab tests conducted in the 0-90 days range after the thrombosis was diagnosed. Here, hoprfully some temporal patterns can be found. There exists 574 tests that satisfies the condition.
+
+```{python}
+#| echo: true
+#| warning: false
+#select tests after thrombosis
+alltests_thrombosis_positive_after90 = alltests_thrombosis_positive [(alltests_thrombosis_positive ['days_passed'] >= 0) & (alltests_thrombosis_positive ['days_passed'] < 90)]
+```
+
+I focused mainly on GOT, GPT, and ALP. All null velues needs to be removed. After dropping the null values, there are 378 entries in the set.
+
+```{python}
+#| echo: true
+#| warning: false
+#drop null
+none_null = alltests_thrombosis_positive_after90.dropna(subset=['GOT', 'GPT','ALP'], how='any')
+none_null['GOT'] = none_null['GOT'].astype('float64')
+none_null['GPT'] = none_null['GPT'].astype('float64')
+none_null['ALP'] = none_null['ALP'].astype('float64')
+```
+
+```{python}
+#| echo: true
+#| warning: false
+#drop null
+none_null.describe()
+```
+
+The I tried to do a time series plot and plot all 'GOT', 'GPT','ALP' values on a same graph. This is achieved using seaborn lineplot. x,y range are set to view the data better.
+
+```{python}
+#| echo: true
+#| warning: false
+
+palette = plt.get_cmap('Set1')
+got_gpt= none_null [['GOT', 'GPT','ALP','days_passed']]
+plt.style.use('default')
+# Plot multiple lines
+num=0
+for column in got_gpt.drop('days_passed', axis=1):
+    num+=1
+    sns.lineplot(data=got_gpt, x='days_passed', y=column, marker='', color=palette(num), linewidth=1, alpha=0.9, label=column)
+
+plt.yticks(np.arange(0, 400, 50))
+plt.xticks(np.arange(0, 100, 10))
+plt.ylim([0,350])
+plt.title("Change in GOT, GTP, ALP with respect to time")
+plt.xlabel('Days passed (after thrombosis)')
+plt.ylabel('Value')
+plt.legend(loc='center right', bbox_to_anchor=(1.15, 0.5))
+plt.savefig("plot-03.png")
+```
+
+In previous EDA, I noticed the value of GOT and GPT are very close, and they change in a very similar fashion. After some investigation, I found that both of them help test the function of liver. So I plot a hexobin plot to view their covariance.
+
+```{python}
+#| echo: true
+#| warning: false
+sns.jointplot(data=got_gpt, x="GOT", y="GPT", kind="hex", color="navy")
+plt.yticks(np.arange(0, 200, 40))
+plt.xticks(np.arange(0, 200, 40))
+plt.ylim([0,200])
+plt.xlim([0,200])
+plt.colorbar()
+plt.title("Joint plot of GOT and GTP with marginal histograms", y=1.3, x=0.6)
+plt.savefig("plot-04.png")
+```
+
+## Technical Summary
+
+In short, this report focus on collagen diseases and one of the most severe complications thrombosis. It explores the relationship between anti-cardiolipin antibodies and thrombosis, then dig furture into isotypes of anti-cardiolipin antibodies (IgG, IgA, IgM) and look for similarity and differences in their relation to thrombosis. Finally, it tries to identify any patterns that can help predict thrombosis.
+
+The EDA first start with loading the data, first look at the data, and use info() functions to find basic information about the data. During the process, I didn't realize the variables in dataset C (all tests) are in object datatype. This brought me a lot of problem when trying to merge the table. I tried to merge the table based on ID as a key. But because I compared a float with an object, it wouldn't work. The key variable that connets three datasets together are the ID column and the datasets are sorted by ID in an ascending order.
+
+The column names are edited to make consistent and more explanatory across three files. The rows that contain null values are droppped based on the variable of interest (ID, aCL IgG', 'aCL IgM', 'aCL IgA,etc.).
+
+To conduct EDA, a total of two datasets created. One combining the data in *patients* and *spe_tests* and the other containing all the laboratory tests of patients who had been tested positive with thrombosis. Outliers are dealt with based on IQR, and additional columns like Thrombosis_diagnosed, data_passed are added to aid the EDA.
+
+A total of four final plots are created: a violin plots on anti-cardiolipin antibodies and thrombosis, a stacked histogram on three isotypes of anti-cardiolipin antibodies and thrombosis, a lineplot on the value of GOT', 'GPT','ALP' with respect to time and a hexobin plot that explores the covariance between GOT and GPT.
+
+During the EDA, a lot of issues arised and dealt with assumption. First, there are a lot of extreme values in the dataset and it skews the distribution a lot. To perform the analysis better, the outliers are dropped using IQR, but admittely they may provide useful information to the temporal pattern in thrombosis. Second, one research focus of this EDA is thrombosis, a categorical varibale, and anti-cardiolipin antibodies, continuous variables. This poses a lot of difficulty when doing the data visualisation.

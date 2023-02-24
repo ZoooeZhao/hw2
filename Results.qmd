@@ -1,0 +1,54 @@
+---
+title: " Results of EDA on the Medical Data Set"
+author:
+  - name: Zoe Zhao
+    affiliations:
+      - name: Georgetown University
+date: "`r Sys.Date()`"
+format:
+    html:
+        toc: true
+        toc-depth: 5
+        embed-resources: true
+        number-sections: true
+---
+
+### The Dataset
+
+The collagen disease dataset is collected at the University Hospital. It is comprised of three csv files: patients dataset which includes patients information and their basic demographics, spe_tests dataset which includes the special tests assigned by doctors to detect thrombosis, one of the most dangerous complications of collagen disease, and alltests dataset which includes all the laboratory tests in the hospital database.
+
+![*The patients dataset*](images/Screenshot%202023-02-24%20at%2010.12.04%20AM.png){fig-align="center" width="519"}
+
+![*The Spec_tests dataset*](images/Screenshot%202023-02-24%20at%2010.13.55%20AM.png)
+
+![*Alltests dataset*](images/Screenshot%202023-02-24%20at%2010.15.43%20AM.png){fig-align="center"}
+
+The three datasets are organised on patients ID. Each patient has a unique ID that identifies them and it is linked with the tests they conducted. The datasets contains valuable information on collagen disease and thrombosis. Analysing and understanding it is essential to find patterns and observations that may influence the field.
+
+### Final Plots
+
+##### *Fig-1*
+
+![](plot-01.png){width="716"}
+
+The anti-cardiolipin antibodies had been suspected with the occurance of thrombosis, one of the most severe complications of collagen disease. This combined violin plots reveals the distribution of anti-cardiolipin antibodies (aCL IgG, IgA, IgM) with respect to different degree of thrombosis. A degree of 0 means there's no thrombosis detected and the severity increases as the number increases (1, 2, 3...). In fig-1, we can see that for IgA most value aggregate at 0, no matter what the degree of thrombosis is. How ever, it can be observed that as the degree of thrombosis increases, the IgA value scatters more and is more likely to have a high value. For IgG, it shows a similar patter as IgA, at a level of 0 thrombosis, most values aggregate at 0. But for positive thrombosis cases, patients are more likely to have a high IgG. For IgM, the same pattern is found. High IgM values are more likely associated with high degree of thrombosis. Notice both for IgG and IgM, when the level of severity is 3, the value is either very high or very low. There are only a few in between.
+
+##### *Fig-2*
+
+![](plot-02.png){width="707"}
+
+Figure 2 is a stacked histogram on three isotypes(aCL IgG, IgA, IgM) of anti-cardiolipin antibodies and thrombosis. The stacked diagram allows for a easier comparison among isotypes and degrees of thrombosis. Look at three histograms as a whole, it can be found that all three isotypes follow a normal distribution slightly skewed toward left except the large amount of 0 values on the very left. Look at each histogram individually, a similar pattern is found as the violin plot. A higher degree of thrombosis is more likely associated with higher anti-cardiolipin antibodies values.
+
+##### *Fig-3*
+
+![](plot-03.png){fig-align="center"}
+
+Both fig3 and fig4 deals with a same dataset of positive thrombosis patients only. Fig 3 looks at values of GOT', 'GPT','ALP' tested within 90 days range after the first diagnosis of thrombosis. From the figure, we can see that there's a great variation in all three variables while they follow a similar pattern of bumps and ebbs. We can see vast flactuations in the values after 3 days, 20 days, 25 days,50 days, 75 days of diagnosis for all thee variables. Especially for GOT and GPT, they generally have a same flow. The ALP value is more scatter as compared to GOT and GPT.
+
+##### *Fig-4*
+
+![](images/plot-04.png){fig-align="center" width="480"}
+
+Given a similar pattern is found in GOT and GPT in fig 3, a hexbin plot with marginnal histograms are plotted to show the covariance between two variables. Scientifically, both GOT and GPT help test the function of liver in laboratory. From the graph, we can see that both variable has a normal distribution sightly skewed toward the 0. Generally, GPT has a higher than GOT which is consistent with fig 3. In the graph, the color of each hexagon corresponds to the magnitude of the covariance between a pair of variables. A darker color indicate higher magnitudes of covariance. In fig 4, it is found that the value of GOT and GPT for thrombosis patients are positively correlated, and their relationship is almost linear.
+
+Link to my github: <https://github.com/ZoooeZhao/hw2.git>
